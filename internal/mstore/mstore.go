@@ -1,6 +1,7 @@
 package mstore
 
 import (
+	"sort"
 	"sync"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
@@ -40,12 +41,50 @@ func (ms *MessageStore) GetMessages(jid types.JID) []Message {
 	return ms.msgMap[jid]
 }
 
-func (ms *MessageStore) GetLatestMessage(jid types.JID) *Message {
+type ChatMessage struct {
+	JID         types.JID
+	MessageText string
+	MessageTime int64
+}
+
+func (ms *MessageStore) GetChatList() []ChatMessage {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
-	messages, exists := ms.msgMap[jid]
-	if !exists || len(messages) == 0 {
-		return nil
+	var chatList []ChatMessage
+	for jid, messages := range ms.msgMap {
+		if len(messages) == 0 {
+			continue
+		}
+		latestMsg := messages[len(messages)-1]
+		var messageText string
+		if latestMsg.Content.GetConversation() != "" {
+			messageText = latestMsg.Content.GetConversation()
+		} else if latestMsg.Content.GetExtendedTextMessage() != nil {
+			messageText = latestMsg.Content.GetExtendedTextMessage().GetText()
+		} else {
+			switch {
+			case latestMsg.Content.GetImageMessage() != nil:
+				messageText = "image"
+			case latestMsg.Content.GetVideoMessage() != nil:
+				messageText = "video"
+			case latestMsg.Content.GetAudioMessage() != nil:
+				messageText = "audio"
+			case latestMsg.Content.GetDocumentMessage() != nil:
+				messageText = "document"
+			case latestMsg.Content.GetStickerMessage() != nil:
+				messageText = "sticker"
+			default:
+				messageText = "unsupported message type"
+			}
+		}
+		chatList = append(chatList, ChatMessage{
+			JID:         jid,
+			MessageText: messageText,
+			MessageTime: latestMsg.Info.Timestamp.Unix(),
+		})
 	}
-	return &messages[len(messages)-1]
+	sort.Slice(chatList, func(i, j int) bool {
+		return chatList[i].MessageTime > chatList[j].MessageTime
+	})
+	return chatList
 }

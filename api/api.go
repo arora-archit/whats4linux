@@ -9,6 +9,7 @@ import (
 	"github.com/nyaruka/phonenumbers"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 )
 
@@ -26,6 +27,11 @@ type Contact struct {
 	FullName   string `json:"full_name"`
 	PushName   string `json:"push_name"`
 	IsBusiness bool   `json:"is_business"`
+}
+
+type ChatElement struct {
+	LatestMessage string `json:"latest_message"`
+	Contact
 }
 
 // Api struct
@@ -122,10 +128,42 @@ func (a *Api) FetchContacts() ([]Contact, error) {
 	return result, nil
 }
 
+func (a *Api) FetchMessages(jid string) ([]mstore.Message, error) {
+	parsedJID, err := types.ParseJID(jid)
+	if err != nil {
+		return nil, err
+	}
+	messages := a.messageStore.GetMessages(parsedJID)
+	return messages, nil
+}
+
+func (a *Api) GetChatList() ([]ChatElement, error) {
+	cmList := a.messageStore.GetChatList()
+	ce := make([]ChatElement, len(cmList))
+	for i, cm := range cmList {
+		contact, err := a.waClient.Store.Contacts.GetContact(a.ctx, cm.JID)
+		if err != nil {
+			return nil, err
+		}
+		ce[i] = ChatElement{
+			LatestMessage: cm.MessageText,
+			Contact: Contact{
+				JID:        cm.JID.String(),
+				Short:      contact.FirstName,
+				FullName:   contact.FullName,
+				PushName:   contact.PushName,
+				IsBusiness: contact.BusinessName != "",
+			},
+		}
+	}
+	return ce, nil
+}
+
 func (a *Api) mainEventHandler(evt interface{}) {
 	switch v := evt.(type) {
 	case *events.Message:
 		a.messageStore.ProcessMessageEvent(v)
+		runtime.EventsEmit(a.ctx, "wa:new_message")
 	default:
 		// Ignore other events for now
 	}
