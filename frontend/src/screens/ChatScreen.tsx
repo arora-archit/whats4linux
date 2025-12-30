@@ -15,7 +15,7 @@ import {
 } from "../assets/svgs/chat_icons"
 import { SearchIcon } from "../assets/svgs/settings_icons"
 
-const USE_SAMPLE_DATA = true
+const USE_SAMPLE_DATA = false
 
 const SAMPLE_CHATS: ChatItem[] = [
   {
