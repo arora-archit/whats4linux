@@ -25,7 +25,7 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
   const [selectedFileType, setSelectedFileType] = useState<string>("")
   const [replyingTo, setReplyingTo] = useState<store.Message | null>(null)
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null)
-  
+
   // Lazy loading state
   const [firstItemIndex, setFirstItemIndex] = useState(10000)
   const [hasMore, setHasMore] = useState(true)
@@ -62,10 +62,10 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
     setIsLoadingMore(true)
     const currentMessages = messages[chatId] || []
     const oldestMessage = currentMessages[0]
-    
+
     // Convert ISO string to unix timestamp (seconds)
-    const beforeTimestamp = oldestMessage 
-      ? Math.floor(new Date(oldestMessage.Info.Timestamp).getTime() / 1000) 
+    const beforeTimestamp = oldestMessage
+      ? Math.floor(new Date(oldestMessage.Info.Timestamp).getTime() / 1000)
       : 0
 
     FetchMessagesPaged(chatId, 50, beforeTimestamp)

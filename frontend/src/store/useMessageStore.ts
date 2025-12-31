@@ -39,7 +39,7 @@ export const useMessageStore = create<MessageStore>(set => ({
       const existing = state.messages[chatId] || []
       const msgId = message.Info?.ID
       const idx = existing.findIndex((m: any) => m.Info?.ID === msgId)
-      
+
       if (idx >= 0) {
         // Update existing message
         const updated = [...existing]
