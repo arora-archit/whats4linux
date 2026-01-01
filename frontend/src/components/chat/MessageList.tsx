@@ -9,6 +9,7 @@ interface MessageListProps {
   sentMediaCache: React.MutableRefObject<Map<string, string>>
   onReply?: (message: store.Message) => void
   onLoadMore?: () => void
+  onTrimOldMessages?: () => void
   firstItemIndex: number
   isLoading?: boolean
   hasMore?: boolean
@@ -22,7 +23,7 @@ export interface MessageListHandle {
 const MemoizedMessageItem = memo(MessageItem)
 
 export const MessageList = forwardRef<MessageListHandle, MessageListProps>(function MessageList(
-  { chatId, messages, sentMediaCache, onReply, onLoadMore, firstItemIndex, isLoading, hasMore },
+  { chatId, messages, sentMediaCache, onReply, onLoadMore, onTrimOldMessages, firstItemIndex, isLoading, hasMore },
   ref,
 ) {
   const virtuosoRef = useRef<VirtuosoHandle>(null)
@@ -51,6 +52,13 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
     }
   }, [isLoading, hasMore, onLoadMore])
 
+  // Handle reaching the bottom - trim old messages from top
+  const handleEndReached = useCallback(() => {
+    if (onTrimOldMessages && messages.length > 100) {
+      onTrimOldMessages()
+    }
+  }, [onTrimOldMessages, messages.length])
+
   // Loading indicator component
   const LoadingHeader = useCallback(
     () => (
@@ -77,6 +85,7 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
       firstItemIndex={firstItemIndex}
       initialTopMostItemIndex={messages.length - 1}
       startReached={handleStartReached}
+      endReached={handleEndReached}
       followOutput="smooth"
       alignToBottom
       increaseViewportBy={{ top: 200, bottom: 0 }}

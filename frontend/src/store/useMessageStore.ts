@@ -1,7 +1,5 @@
 import { create } from "zustand"
 
-const MAX_MESSAGES_PER_CHAT = 200
-
 interface MessageStore {
   messages: Record<string, any[]>
   activeChatId: string | null
@@ -11,6 +9,7 @@ interface MessageStore {
   prependMessages: (chatId: string, messages: any[]) => void
   updateMessage: (chatId: string, message: any) => void
   clearMessages: (chatId: string) => void
+  trimOldMessages: (chatId: string, keepCount: number) => void
 }
 
 export const useMessageStore = create<MessageStore>((set, get) => ({
@@ -40,7 +39,7 @@ export const useMessageStore = create<MessageStore>((set, get) => ({
     set(state => ({
       messages: {
         ...state.messages,
-        [chatId]: messages.slice(-MAX_MESSAGES_PER_CHAT), // Limit stored messages
+        [chatId]: messages,
       },
     })),
 
@@ -51,7 +50,7 @@ export const useMessageStore = create<MessageStore>((set, get) => ({
       return {
         messages: {
           ...state.messages,
-          [chatId]: newMessages.slice(-MAX_MESSAGES_PER_CHAT),
+          [chatId]: newMessages,
         },
       }
     }),
@@ -63,7 +62,7 @@ export const useMessageStore = create<MessageStore>((set, get) => ({
       return {
         messages: {
           ...state.messages,
-          [chatId]: combined.slice(0, MAX_MESSAGES_PER_CHAT), // Keep from start when prepending
+          [chatId]: combined,
         },
       }
     }),
@@ -86,9 +85,23 @@ export const useMessageStore = create<MessageStore>((set, get) => ({
         return {
           messages: {
             ...state.messages,
-            [chatId]: newMessages.slice(-MAX_MESSAGES_PER_CHAT),
+            [chatId]: newMessages,
           },
         }
+      }
+    }),
+
+  // Trim old messages from the top, keeping the most recent ones
+  trimOldMessages: (chatId, keepCount) =>
+    set(state => {
+      const existing = state.messages[chatId] || []
+      if (existing.length <= keepCount) return state
+      
+      return {
+        messages: {
+          ...state.messages,
+          [chatId]: existing.slice(-keepCount),
+        },
       }
     }),
 

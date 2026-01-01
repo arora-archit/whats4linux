@@ -26,9 +26,8 @@ const MaxMessageCacheSize = 50
 type MessageStore struct {
 	db          *sql.DB
 	msgMap      *cacher.Cacher[types.JID, []Message]
-	chatListMap *cacher.Cacher[string, []ChatMessage]
+	chatListMap *cacher.Cacher[types.JID, ChatMessage]
 	mCache      misc.VMap[string, uint8]
-	lru         []types.JID
 }
 
 func NewMessageStore() (*MessageStore, error) {
@@ -46,18 +45,17 @@ func NewMessageStore() (*MessageStore, error) {
 
 	// Configure chat list cache (decentralized, separate from messages)
 	chatListCacheOpts := &cacher.NewCacherOpts{
-		TimeToLive:    5 * time.Minute,
+		TimeToLive:    10 * time.Minute,
 		Revaluate:     true,
-		CleanInterval: 10 * time.Minute,
+		CleanInterval: 15 * time.Minute,
 	}
-	chatListCache := cacher.NewCacher[string, []ChatMessage](chatListCacheOpts)
+	chatListCache := cacher.NewCacher[types.JID, ChatMessage](chatListCacheOpts)
 
 	ms := &MessageStore{
 		db:          db,
 		msgMap:      msgCache,
 		chatListMap: chatListCache,
 		mCache:      misc.NewVMap[string, uint8](),
-		lru:         make([]types.JID, 0, MaxMessageCacheSize),
 	}
 
 	if err := ms.initSchema(); err != nil {
@@ -95,11 +93,8 @@ func (ms *MessageStore) ProcessMessageEvent(msg *events.Message) {
 	ml = append(ml, m)
 	ms.msgMap.Set(chat, ml)
 
-	// Update LRU and enforce MaxSize
-	ms.updateLRU(chat)
-	ms.enforceMaxSize()
-
-	ms.chatListMap.Delete("chatlist")
+	// Invalidate specific chat in chatListMap
+	ms.chatListMap.Delete(chat)
 
 	err := ms.insertMessageToDB(&m)
 	if err != nil {
@@ -112,7 +107,6 @@ func (ms *MessageStore) GetMessages(jid types.JID) []Message {
 	if !ok {
 		return []Message{}
 	}
-	ms.updateLRU(jid)
 	return ml
 }
 
@@ -121,23 +115,18 @@ func (ms *MessageStore) GetMessages(jid types.JID) []Message {
 // limit: max number of messages to return
 // Returns messages in chronological order (oldest first within the page)
 func (ms *MessageStore) GetMessagesPaged(jid types.JID, beforeTimestamp int64, limit int) []Message {
+	// Check cache first
 	ml, ok := ms.msgMap.Get(jid)
-	if !ok {
-		// Load from DB if not in memory
-		ml = ms.loadMessagesFromDBForChat(jid)
-		ms.msgMap.Set(jid, ml)
-		ms.updateLRU(jid)
-		ms.enforceMaxSize()
-	} else {
-		ms.updateLRU(jid)
+	if !ok || len(ml) == 0 {
+		// Cache miss - load all messages from DB and populate cache
+		ml = ms.loadAndCacheAllMessages(jid)
+		if len(ml) == 0 {
+			return []Message{}
+		}
 	}
 
-	if len(ml) == 0 {
-		return nil
-	}
-
-	// If beforeTimestamp is 0, get the latest messages
 	if beforeTimestamp == 0 {
+		// Get latest messages
 		start := len(ml) - limit
 		if start < 0 {
 			start = 0
@@ -159,6 +148,54 @@ func (ms *MessageStore) GetMessagesPaged(jid types.JID, beforeTimestamp int64, l
 	}
 
 	return result
+}
+
+// loadAndCacheAllMessages loads all messages for a chat from DB and caches them
+func (ms *MessageStore) loadAndCacheAllMessages(jid types.JID) []Message {
+	rows, err := ms.db.Query(query.SelectMessagesByChat, jid.String())
+	if err != nil {
+		return []Message{}
+	}
+	defer rows.Close()
+
+	var messages []Message
+	for rows.Next() {
+		var (
+			chat  string
+			msgID string
+			ts    int64
+			minf  []byte
+			raw   []byte
+		)
+
+		if err := rows.Scan(&chat, &msgID, &ts, &minf, &raw); err != nil {
+			continue
+		}
+
+		var messageInfo types.MessageInfo
+		if err := gobDecode(minf, &messageInfo); err != nil {
+			continue
+		}
+
+		var waMsg *waE2E.Message
+		waMsg, err = unmarshalMessageContent(raw)
+		if err != nil {
+			continue
+		}
+
+		messages = append(messages, Message{
+			Info:    messageInfo,
+			Content: waMsg,
+		})
+		ms.mCache.Set(msgID, 1)
+	}
+
+	// Cache the loaded messages
+	if len(messages) > 0 {
+		ms.msgMap.Set(jid, messages)
+	}
+
+	return messages
 }
 
 // loadMessagesFromDBForChat loads messages for a specific chat from DB
@@ -210,11 +247,8 @@ func (ms *MessageStore) GetTotalMessageCount(jid types.JID) int {
 		// Load from DB to get count
 		ml = ms.loadMessagesFromDBForChat(jid)
 		ms.msgMap.Set(jid, ml)
-		ms.updateLRU(jid)
-		ms.enforceMaxSize()
 		return len(ml)
 	}
-	ms.updateLRU(jid)
 	return len(ml)
 }
 
@@ -223,7 +257,6 @@ func (ms *MessageStore) GetMessage(chatJID types.JID, messageID string) *Message
 	if !ok {
 		return nil
 	}
-	ms.updateLRU(chatJID)
 	for _, msg := range msgs {
 		if msg.Info.ID == messageID {
 			return &msg
@@ -239,11 +272,6 @@ type ChatMessage struct {
 }
 
 func (ms *MessageStore) GetChatList() []ChatMessage {
-	// Check decentralized chat list cache first
-	if cachedList, ok := ms.chatListMap.Get("chatlist"); ok {
-		return cachedList
-	}
-
 	rows, err := ms.db.Query(query.SelectChatList)
 	if err != nil {
 		return []ChatMessage{}
@@ -266,6 +294,12 @@ func (ms *MessageStore) GetChatList() []ChatMessage {
 
 		chatJID, err := types.ParseJID(chat)
 		if err != nil {
+			continue
+		}
+
+		// Check per-chat cache first
+		if cachedChat, ok := ms.chatListMap.Get(chatJID); ok {
+			chatList = append(chatList, cachedChat)
 			continue
 		}
 
@@ -302,36 +336,18 @@ func (ms *MessageStore) GetChatList() []ChatMessage {
 			}
 		}
 
-		chatList = append(chatList, ChatMessage{
+		chatMsg := ChatMessage{
 			JID:         chatJID,
 			MessageText: messageText,
 			MessageTime: ts,
-		})
-	}
+		}
 
-	ms.chatListMap.Set("chatlist", chatList)
+		// Cache per-chat entry
+		ms.chatListMap.Set(chatJID, chatMsg)
+		chatList = append(chatList, chatMsg)
+	}
 
 	return chatList
-}
-
-// updateLRU moves the accessed chat to the front of LRU list
-func (ms *MessageStore) updateLRU(jid types.JID) {
-	for i, id := range ms.lru {
-		if id == jid {
-			ms.lru = append(ms.lru[:i], ms.lru[i+1:]...)
-			break
-		}
-	}
-	ms.lru = append([]types.JID{jid}, ms.lru...)
-}
-
-func (ms *MessageStore) enforceMaxSize() {
-	if len(ms.lru) > MaxMessageCacheSize {
-		for i := MaxMessageCacheSize; i < len(ms.lru); i++ {
-			ms.msgMap.Delete(ms.lru[i])
-		}
-		ms.lru = ms.lru[:MaxMessageCacheSize]
-	}
 }
 
 func (ms *MessageStore) loadMessagesFromDB() error {

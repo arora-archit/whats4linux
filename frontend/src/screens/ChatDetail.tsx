@@ -90,6 +90,22 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
       .finally(() => setIsLoadingMore(false))
   }, [chatId, hasMore, isLoadingMore, messages, prependMessages])
 
+  const handleTrimOldMessages = useCallback(() => {
+    const currentMessages = messages[chatId] || []
+    // When reaching bottom with many messages, reload to initial state
+    if (currentMessages.length > 100) {
+      // Reload the latest 50 messages and reset state
+      FetchMessagesPaged(chatId, 50, 0)
+        .then((msgs: store.Message[]) => {
+          const loadedMsgs = msgs || []
+          setMessages(chatId, loadedMsgs)
+          setHasMore(loadedMsgs.length >= 50)
+          setFirstItemIndex(START_INDEX)
+        })
+        .catch(console.error)
+    }
+  }, [chatId, messages, setMessages])
+
   const adjustTextareaHeight = () => {
     const textarea = textareaRef.current
     if (!textarea) return
@@ -300,6 +316,7 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
         sentMediaCache={sentMediaCache}
         onReply={setReplyingTo}
         onLoadMore={loadMoreMessages}
+        onTrimOldMessages={handleTrimOldMessages}
         firstItemIndex={firstItemIndex}
         isLoading={isLoadingMore || initialLoad}
         hasMore={hasMore}

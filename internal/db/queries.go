@@ -70,4 +70,28 @@ const (
 	)
 	ORDER BY timestamp DESC
 	`
+
+	SelectMessagesByChatBeforeTimestamp = `
+	SELECT chat, message_id, timestamp, msg_info, raw_message
+	FROM (
+		SELECT chat, message_id, timestamp, msg_info, raw_message
+		FROM messages
+		WHERE chat = ? AND timestamp < ?
+		ORDER BY timestamp DESC
+		LIMIT ?
+	)
+	ORDER BY timestamp ASC
+	`
+
+	SelectLatestMessagesByChat = `
+	SELECT chat, message_id, timestamp, msg_info, raw_message
+	FROM (
+		SELECT chat, message_id, timestamp, msg_info, raw_message
+		FROM messages
+		WHERE chat = ?
+		ORDER BY timestamp DESC
+		LIMIT ?
+	)
+	ORDER BY timestamp ASC
+	`
 )
