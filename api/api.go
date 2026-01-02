@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/gen2brain/beeep"
+
 	"github.com/lugvitc/whats4linux/internal/misc"
 	"github.com/lugvitc/whats4linux/internal/settings"
 	"github.com/lugvitc/whats4linux/internal/store"
@@ -177,16 +178,6 @@ func (a *Api) FetchContacts() ([]Contact, error) {
 		})
 	}
 	return result, nil
-}
-
-func (a *Api) FetchMessages(jid string) ([]store.Message, error) {
-	parsedJID, err := types.ParseJID(jid)
-	if err != nil {
-		return nil, err
-	}
-	messages := a.messageStore.GetMessages(parsedJID)
-
-	return messages, nil
 }
 
 func (a *Api) FetchMessagesPaged(jid string, limit int, beforeTimestamp int64) ([]store.Message, error) {

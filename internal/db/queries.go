@@ -47,24 +47,11 @@ const (
 	VALUES (?, ?, ?, ?, ?)
 	`
 
-	SelectAllMessages = `
-	SELECT chat, message_id, timestamp, msg_info, raw_message
-	FROM messages
-	ORDER BY timestamp ASC
-	`
-
-	SelectMessagesByChat = `
-	SELECT chat, message_id, timestamp, msg_info, raw_message
-	FROM messages
-	WHERE chat = ?
-	ORDER BY timestamp ASC
-	`
-
 	SelectChatList = `
-	SELECT chat, message_id, timestamp, msg_info, raw_message
+	SELECT chat, timestamp, msg_info, raw_message
 	FROM (
 		SELECT 
-			chat, message_id, timestamp, msg_info, raw_message,
+			chat, timestamp, msg_info, raw_message,
 			ROW_NUMBER() OVER (
 				PARTITION BY chat
 				ORDER BY timestamp DESC, rowid DESC
@@ -76,9 +63,9 @@ const (
 	`
 
 	SelectMessagesByChatBeforeTimestamp = `
-	SELECT chat, message_id, timestamp, msg_info, raw_message
+	SELECT msg_info, raw_message, timestamp
 	FROM (
-		SELECT chat, message_id, timestamp, msg_info, raw_message
+		SELECT msg_info, raw_message, timestamp
 		FROM messages
 		WHERE chat = ? AND timestamp < ?
 		ORDER BY timestamp DESC
@@ -88,14 +75,20 @@ const (
 	`
 
 	SelectLatestMessagesByChat = `
-	SELECT chat, message_id, timestamp, msg_info, raw_message
+	SELECT msg_info, raw_message, timestamp
 	FROM (
-		SELECT chat, message_id, timestamp, msg_info, raw_message
+		SELECT msg_info, raw_message, timestamp
 		FROM messages
 		WHERE chat = ?
 		ORDER BY timestamp DESC
 		LIMIT ?
 	)
 	ORDER BY timestamp ASC
+	`
+
+	SelectMessageByChatAndID = `
+	SELECT msg_info, raw_message
+	FROM messages
+	WHERE chat = ? AND message_id = ?;
 	`
 )
