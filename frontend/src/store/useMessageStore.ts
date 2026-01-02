@@ -96,9 +96,7 @@ export const useMessageStore = create<MessageStore>()(
           state.messages[chatId][idx] = message
         } else {
           // Fallback: If tempId not found, use updateMessage logic
-          const existingIdx = state.messages[chatId].findIndex(
-            m => m.Info?.ID === message.Info?.ID,
-          )
+          const existingIdx = state.messages[chatId].findIndex(m => m.Info?.ID === message.Info?.ID)
           if (existingIdx >= 0) {
             state.messages[chatId][existingIdx] = message
           } else {
