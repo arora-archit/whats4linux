@@ -39,7 +39,7 @@ type Contact struct {
 
 type ChatElement struct {
 	LatestMessage string `json:"latest_message"`
-	LatestTS int64
+	LatestTS      int64
 	Contact
 }
 
@@ -297,7 +297,7 @@ func (a *Api) GetChatList() ([]ChatElement, error) {
 		fc.FullName = fmt.Sprintf("%s (%s)", fc.FullName, cm.JID.String())
 		ce[i] = ChatElement{
 			LatestMessage: cm.MessageText,
-			LatestTS: cm.MessageTime,
+			LatestTS:      cm.MessageTime,
 			Contact:       fc,
 		}
 	}
