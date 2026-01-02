@@ -195,7 +195,7 @@ func (ms *MessageStore) GetMessagesPaged(jid types.JID, beforeTimestamp int64, l
 }
 
 func (ms *MessageStore) GetMessage(chatJID types.JID, messageID string) *Message {
-	row := ms.db.QueryRow(`SELECT msg_info, raw_message FROM messages WHERE chat = ? AND message_id = ? LIMIT 1`, chatJID.String(), messageID)
+	row := ms.db.QueryRow(query.SelectMessageByChatAndID, chatJID.String(), messageID)
 	var (
 		minf []byte
 		raw  []byte
@@ -216,7 +216,7 @@ func (ms *MessageStore) GetMessageByID(messageID string) *Message {
 	var ts int64
 	var minf, raw []byte
 
-	err := ms.db.QueryRow(`SELECT chat, message_id, timestamp, msg_info, raw_message FROM messages WHERE message_id = ? LIMIT 1`, messageID).Scan(&chat, &msgID, &ts, &minf, &raw)
+	err := ms.db.QueryRow(query.SelectMessageByID, messageID).Scan(&chat, &msgID, &ts, &minf, &raw)
 	if err != nil {
 		return nil
 	}

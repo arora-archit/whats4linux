@@ -132,7 +132,7 @@ func (ic *ImageCache) GetImagesByMessageIDs(messageIDs []string) (map[string]*Im
 		args[i] = id
 	}
 
-	q := "SELECT message_id, sha256, mime, width, height, created_at FROM image_index WHERE message_id IN (" + strings.Join(placeholders, ",") + ")"
+	q := query.GetImagesByIDsPrefix + strings.Join(placeholders, ",") + ")"
 	rows, err := ic.db.Query(q, args...)
 	if err != nil {
 		return nil, err
