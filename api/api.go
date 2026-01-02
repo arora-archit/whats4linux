@@ -286,7 +286,6 @@ func (a *Api) GetChatList() ([]ChatElement, error) {
 		}
 
 		// Get cached avatar for all chats (both groups and contacts)
-		log.Printf("Fetching avatar for: %s (server: %s)", cm.JID.String(), cm.JID.Server)
 		if avatarURL, err := a.GetCachedAvatar(cm.JID.String()); err == nil && avatarURL != "" {
 			fc.AvatarURL = avatarURL
 		} else {
@@ -780,16 +779,13 @@ func (a *Api) GetCachedImages(messageIDs []string) (map[string]string, error) {
 
 // GetCachedAvatar retrieves or downloads and caches an avatar for a JID
 func (a *Api) GetCachedAvatar(jid string) (string, error) {
-	log.Printf("[GetCachedAvatar] Starting for JID: %s", jid)
 
 	// Try to get cached avatar data first
 	data, mime, err := a.imageCache.ReadAvatarByJID(jid)
 	if err == nil {
 		avatarDataURL := fmt.Sprintf("data:%s;base64,%s", mime, base64.StdEncoding.EncodeToString(data))
-		log.Printf("[GetCachedAvatar] Found cached avatar for %s: data URL generated", jid)
 		return avatarDataURL, nil
 	}
-	log.Printf("[GetCachedAvatar] No cached avatar found for %s, downloading: %v", jid, err)
 
 	// Avatar not in cache, download and cache it
 	jidParsed, err := types.ParseJID(jid)
@@ -840,16 +836,14 @@ func (a *Api) GetCachedAvatar(jid string) (string, error) {
 	}
 
 	// Cache the avatar
-	hash, err := a.imageCache.SaveAvatar(jid, data, mime)
+	_, err = a.imageCache.SaveAvatar(jid, data, mime)
 	if err != nil {
 		log.Printf("[GetCachedAvatar] Failed to cache avatar for %s: %v", jid, err)
 		return "", fmt.Errorf("failed to cache avatar: %w", err)
 	}
-	log.Printf("[GetCachedAvatar] Successfully cached avatar for %s with hash: %s", jid, hash)
 
 	// Return data URL like message images do
 	avatarDataURL := fmt.Sprintf("data:%s;base64,%s", mime, base64.StdEncoding.EncodeToString(data))
-	log.Printf("[GetCachedAvatar] Returning data URL for %s", jid)
 	return avatarDataURL, nil
 }
 
