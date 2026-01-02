@@ -22,8 +22,7 @@ export function ImagePreview({ src, onClose, messageId }: ImagePreviewProps) {
   const handleDownload = async () => {
     try {
       await DownloadImageToFile(messageId)
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   return (
@@ -33,7 +32,7 @@ export function ImagePreview({ src, onClose, messageId }: ImagePreviewProps) {
     >
       <div className="absolute top-4 right-4 flex gap-2">
         <button
-          onClick={(e) => {
+          onClick={e => {
             e.stopPropagation()
             handleDownload()
           }}
@@ -45,7 +44,7 @@ export function ImagePreview({ src, onClose, messageId }: ImagePreviewProps) {
           </svg>
         </button>
         <button
-          onClick={(e) => {
+          onClick={e => {
             e.stopPropagation()
             onClose()
           }}
@@ -61,7 +60,7 @@ export function ImagePreview({ src, onClose, messageId }: ImagePreviewProps) {
         src={src}
         alt="Preview"
         className="max-w-[90vw] max-h-[90vh] object-contain"
-        onClick={(e) => e.stopPropagation()}
+        onClick={e => e.stopPropagation()}
       />
     </div>
   )

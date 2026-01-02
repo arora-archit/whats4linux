@@ -39,8 +39,7 @@ export function MessageItem({ message, chatId, sentMediaCache, onReply }: Messag
   const handleImageDownload = async () => {
     try {
       await DownloadImageToFile(message.Info.ID)
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   const handleReply = () => onReply?.(message)

@@ -170,8 +170,7 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
       } else {
         await SendMessage(chatId, { type: "text", text: textToSend, quotedMessageId })
       }
-    } catch (err) {
-    }
+    } catch (err) {}
   }
 
   useEffect(() => {
