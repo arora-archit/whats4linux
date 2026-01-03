@@ -1,10 +1,10 @@
-import { useEffect, useRef, useCallback } from "react"
+import { useEffect, useRef, useCallback, memo } from "react"
 import clsx from "clsx"
 import { GetChatList } from "../../wailsjs/go/api/Api"
 import { api } from "../../wailsjs/go/models"
 import { EventsOn } from "../../wailsjs/runtime/runtime"
 import { ChatDetail } from "./ChatDetail"
-import { useChatStore } from "../store"
+import { useChatStore, useChatById, useFilteredChatIds } from "../store"
 import type { ChatItem } from "../store/types"
 import {
   GroupIcon,
@@ -120,13 +120,24 @@ const SearchBar = ({ value, onChange }: SearchBarProps) => (
   </div>
 )
 
-interface ChatListItemProps {
+// Memoized ChatAvatar - only re-renders if avatar changes
+const MemoizedChatAvatar = memo(({ avatar, type, name }: { avatar?: string; type: "group" | "contact"; name: string }) => {
+  if (avatar) {
+    return <img src={avatar} alt={name} className="w-full h-full object-cover" />
+  }
+  return type === "group" ? <GroupIcon /> : <UserAvatar />
+})
+
+MemoizedChatAvatar.displayName = "MemoizedChatAvatar"
+
+interface ChatListItemContentProps {
   chat: ChatItem
   isSelected: boolean
   onSelect: (chat: ChatItem) => void
 }
 
-const ChatListItem = ({ chat, isSelected, onSelect }: ChatListItemProps) => (
+// Pure presentational component - memoized to prevent unnecessary re-renders
+const ChatListItemContent = memo(({ chat, isSelected, onSelect }: ChatListItemContentProps) => (
   <div
     onClick={() => onSelect(chat)}
     className={clsx(
@@ -136,7 +147,7 @@ const ChatListItem = ({ chat, isSelected, onSelect }: ChatListItemProps) => (
     )}
   >
     <div className="w-12 h-12 rounded-full bg-gray-300 dark:bg-gray-600 mr-4 shrink-0 overflow-hidden flex items-center justify-center">
-      <ChatAvatar chat={chat} />
+      <MemoizedChatAvatar avatar={chat.avatar} type={chat.type} name={chat.name} />
     </div>
     <div className="flex-1 min-w-0">
       <div className="flex justify-between items-baseline mb-1">
@@ -153,7 +164,33 @@ const ChatListItem = ({ chat, isSelected, onSelect }: ChatListItemProps) => (
       <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{chat.subtitle}</p>
     </div>
   </div>
-)
+))
+
+ChatListItemContent.displayName = "ChatListItemContent"
+
+interface ChatListItemProps {
+  chatId: string
+  isSelected: boolean
+  onSelect: (chat: ChatItem) => void
+}
+
+// Container component that subscribes to specific chat data
+const ChatListItem = memo(({ chatId, isSelected, onSelect }: ChatListItemProps) => {
+  // This hook only triggers re-render when THIS specific chat changes
+  const chat = useChatById(chatId)
+  
+  if (!chat) return null
+  
+  return (
+    <ChatListItemContent
+      chat={chat}
+      isSelected={isSelected}
+      onSelect={onSelect}
+    />
+  )
+})
+
+ChatListItem.displayName = "ChatListItem"
 
 interface EmptyStateProps {
   hasChats: boolean
@@ -197,20 +234,25 @@ interface ChatListScreenProps {
 }
 
 export function ChatListScreen({ onOpenSettings }: ChatListScreenProps) {
-  const {
-    chats,
-    selectedChatId,
-    selectedChatName,
-    selectedChatAvatar,
-    searchTerm,
-    setChats,
-    selectChat,
-    setSearchTerm,
-    clearUnreadCount,
-  } = useChatStore()
+  // Use individual selectors to minimize re-renders
+  const selectedChatId = useChatStore(state => state.selectedChatId)
+  const selectedChatName = useChatStore(state => state.selectedChatName)
+  const selectedChatAvatar = useChatStore(state => state.selectedChatAvatar)
+  const searchTerm = useChatStore(state => state.searchTerm)
+  const setChats = useChatStore(state => state.setChats)
+  const selectChat = useChatStore(state => state.selectChat)
+  const setSearchTerm = useChatStore(state => state.setSearchTerm)
+  const clearUnreadCount = useChatStore(state => state.clearUnreadCount)
+  const updateChatLastMessage = useChatStore(state => state.updateChatLastMessage)
+  const getChat = useChatStore(state => state.getChat)
+  
+  // Get filtered chat IDs - only re-renders when IDs or search changes, not on message/timestamp updates
+  const filteredChatIds = useFilteredChatIds()
+  const totalChats = useChatStore(state => state.chatIds.length)
 
   const isFetchingRef = useRef(false)
   const mountedRef = useRef(true)
+  const initialFetchDoneRef = useRef(false)
 
   const handleChatSelect = useCallback(
     (chat: ChatItem) => {
@@ -261,6 +303,7 @@ export function ChatListScreen({ onOpenSettings }: ChatListScreenProps) {
 
       const items = transformChatElements(chatElements)
       setChats(items)
+      initialFetchDoneRef.current = true
     } catch (err) {
       console.error("Error fetching chats:", err)
       if (mountedRef.current && USE_SAMPLE_DATA) {
@@ -276,20 +319,41 @@ export function ChatListScreen({ onOpenSettings }: ChatListScreenProps) {
   useEffect(() => {
     mountedRef.current = true
 
+    // Initial fetch
     const timeout = setTimeout(fetchChats, 100)
-    const unsub = EventsOn("wa:new_message", () => {
+    
+    // Listen for new messages - update only the specific chat
+    const unsubNewMessage = EventsOn("wa:new_message", (data: { chatId: string; messageText: string; timestamp: number }) => {
+      if (!initialFetchDoneRef.current) {
+        // If we haven't done initial fetch, do a full fetch
+        setTimeout(fetchChats, 500)
+        return
+      }
+      
+      // Check if we already have this chat in our list
+      const existingChat = getChat(data.chatId)
+      if (existingChat) {
+        // Update only this specific chat - no full re-fetch needed!
+        updateChatLastMessage(data.chatId, data.messageText, data.timestamp)
+      } else {
+        // New chat we don't have - need to fetch to get avatar/name
+        setTimeout(fetchChats, 500)
+      }
+    })
+    
+    // Fallback: listen for generic updates that require full refresh
+    const unsubRefresh = EventsOn("wa:chat_list_refresh", () => {
       setTimeout(fetchChats, 500)
     })
 
     return () => {
       mountedRef.current = false
       clearTimeout(timeout)
-      unsub()
+      unsubNewMessage()
+      unsubRefresh()
     }
-  }, [fetchChats])
+  }, [fetchChats, getChat, updateChatLastMessage])
 
-  const filteredChats = chats.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
-  console.log(filteredChats)
   return (
     <div className="flex h-screen bg-light-secondary dark:bg-black overflow-hidden">
       {/* Chat List Sidebar */}
@@ -305,18 +369,18 @@ export function ChatListScreen({ onOpenSettings }: ChatListScreenProps) {
         <SearchBar value={searchTerm} onChange={setSearchTerm} />
 
         <div className="flex-1 overflow-y-auto">
-          {filteredChats.length === 0 ? (
+          {filteredChatIds.length === 0 ? (
             <EmptyState
-              hasChats={chats.length > 0}
+              hasChats={totalChats > 0}
               isLoading={isFetchingRef.current}
               onRefresh={fetchChats}
             />
           ) : (
-            filteredChats.map(chat => (
+            filteredChatIds.map(chatId => (
               <ChatListItem
-                key={chat.id}
-                chat={chat}
-                isSelected={selectedChatId === chat.id}
+                key={chatId}
+                chatId={chatId}
+                isSelected={selectedChatId === chatId}
                 onSelect={handleChatSelect}
               />
             ))

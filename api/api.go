@@ -290,7 +290,7 @@ func (a *Api) GetChatList() ([]ChatElement, error) {
 		if avatarURL, err := a.GetCachedAvatar(cm.JID.String()); err == nil && avatarURL != "" {
 			fc.AvatarURL = avatarURL
 		} else {
-			// log.Printf("FAILED: No avatar found for %s: %v", cm.JID.String(), err)
+			log.Printf("FAILED: No avatar found for %s: %v", cm.JID.String(), err)
 		}
 
 		// todo: remove this later
@@ -582,13 +582,38 @@ func (a *Api) SendMessage(chatJID string, content MessageContent) (string, error
 	}
 	a.messageStore.ProcessMessageEvent(msgEvent)
 
+	// Extract message text for chat list update
+	var messageText string
+	if msgContent.GetConversation() != "" {
+		messageText = msgContent.GetConversation()
+	} else if msgContent.GetExtendedTextMessage() != nil {
+		messageText = msgContent.GetExtendedTextMessage().GetText()
+	} else {
+		switch {
+		case msgContent.GetImageMessage() != nil:
+			messageText = "image"
+		case msgContent.GetVideoMessage() != nil:
+			messageText = "video"
+		case msgContent.GetAudioMessage() != nil:
+			messageText = "audio"
+		case msgContent.GetDocumentMessage() != nil:
+			messageText = "document"
+		case msgContent.GetStickerMessage() != nil:
+			messageText = "sticker"
+		default:
+			messageText = "message"
+		}
+	}
+
 	msg := store.Message{
 		Info:    msgEvent.Info,
 		Content: msgEvent.Message,
 	}
 	runtime.EventsEmit(a.ctx, "wa:new_message", map[string]any{
-		"chatId":  parsedJID.String(),
-		"message": msg,
+		"chatId":      parsedJID.String(),
+		"message":     msg,
+		"messageText": messageText,
+		"timestamp":   resp.Timestamp.Unix(),
 	})
 
 	return resp.ID, nil
@@ -639,13 +664,38 @@ func (a *Api) mainEventHandler(evt any) {
 		}()
 
 		// Emit the message data directly so frontend doesn't need to make an API call
+		// Extract message text for chat list update
+		var messageText string
+		if v.Message.GetConversation() != "" {
+			messageText = v.Message.GetConversation()
+		} else if v.Message.GetExtendedTextMessage() != nil {
+			messageText = v.Message.GetExtendedTextMessage().GetText()
+		} else {
+			switch {
+			case v.Message.GetImageMessage() != nil:
+				messageText = "image"
+			case v.Message.GetVideoMessage() != nil:
+				messageText = "video"
+			case v.Message.GetAudioMessage() != nil:
+				messageText = "audio"
+			case v.Message.GetDocumentMessage() != nil:
+				messageText = "document"
+			case v.Message.GetStickerMessage() != nil:
+				messageText = "sticker"
+			default:
+				messageText = "message"
+			}
+		}
+
 		msg := store.Message{
 			Info:    v.Info,
 			Content: v.Message,
 		}
 		runtime.EventsEmit(a.ctx, "wa:new_message", map[string]any{
-			"chatId":  v.Info.Chat.String(),
-			"message": msg,
+			"chatId":      v.Info.Chat.String(),
+			"message":     msg,
+			"messageText": messageText,
+			"timestamp":   v.Info.Timestamp.Unix(),
 		})
 	case *events.Connected:
 		// For new logins, there might be a problem where the whatsmeow client
