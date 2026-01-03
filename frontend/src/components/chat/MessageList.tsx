@@ -47,7 +47,6 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const prefetchTriggeredRef = useRef(false)
 
   const renderItem = useCallback(
     (_: number, msg: store.Message) => {
@@ -88,28 +87,19 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
 
   const scrollToMessage = useCallback(
     (messageId: string) => {
-      if (!virtuosoRef.current) return
+      const el = containerRef.current
+      if (!el) return
 
-      const messageIndex = messages.findIndex(m => m.Info?.ID === messageId)
-      if (messageIndex >= 0) {
-        virtuosoRef.current.scrollToIndex({
-          index: messageIndex,
-          align: "center",
-          behavior: "smooth",
-        })
+      const messageElement = el.querySelector(`[data-message-id="${messageId}"]`) as HTMLElement
+      if (messageElement) {
+        messageElement.scrollIntoView({ behavior: "smooth", block: "center" })
       }
     },
-    [messages],
+    [],
   )
 
   useImperativeHandle(ref, () => ({ scrollToBottom, scrollToMessage }))
 
-  const handleStartReached = useCallback(() => {
-    if (!isLoading && hasMore && onLoadMore) {
-      onLoadMore()
-      prefetchTriggeredRef.current = false
-    }
-  }, [isLoading, hasMore, onLoadMore])
 
   useEffect(() => {
     // Scroll to bottom on mount
@@ -122,13 +112,14 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
   const onScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const el = e.currentTarget
-      if (el.scrollTop <= 50) {
-        handleStartReached()
+      // Trigger load more when ~2 messages are left above viewport (assuming ~100px per message)
+      if (el.scrollTop <= 200 && !isLoading && hasMore && onLoadMore) {
+        onLoadMore()
       }
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 5
       onAtBottomChange?.(atBottom)
     },
-    [handleStartReached, onAtBottomChange],
+    [isLoading, hasMore, onLoadMore, onAtBottomChange],
   )
 
   return (
@@ -144,7 +135,7 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
         ) : null}
       </div>
       {messages.map((msg) => (
-        <div key={msg.Info.ID} className="px-4 py-1">
+        <div key={msg.Info.ID} data-message-id={msg.Info.ID} className="px-4 py-1">
           <MemoizedMessageItem
             message={msg}
             chatId={chatId}

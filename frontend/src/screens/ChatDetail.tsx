@@ -335,6 +335,14 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
         ease: easeShowRef.current,
       })
     }
+    //trim the message list to last 20 messages when at bottom
+    if (isAtBottom) {
+      const currentMessages = messages[chatId] || []
+      if (currentMessages.length > 50) {
+        setMessages(chatId, currentMessages.slice(-25))
+        setFirstItemIndex(prev => prev + (currentMessages.length - 25))
+      }
+    }
   }, [isAtBottom])
 
   return (
