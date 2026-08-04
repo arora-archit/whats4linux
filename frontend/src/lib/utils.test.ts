@@ -8,6 +8,9 @@ import {
   PROFILE_COLORS,
   AVATAR_COLORS_LIGHT,
   AVATAR_COLORS_DARK,
+  formatChatTimestamp,
+  formatDateSeparator,
+  dayKey,
 } from "./utils"
 
 describe("formatPhone", () => {
@@ -108,5 +111,76 @@ describe("getAvatarColor", () => {
   it("getProfileColor aliases light palette", () => {
     expect(getProfileColor("hello@g.us")).toBe(getAvatarColor("hello@g.us", false))
     expect(PROFILE_COLORS).toBe(AVATAR_COLORS_LIGHT)
+  })
+})
+
+describe("dayKey", () => {
+  it("extracts YYYY-MM-DD from ISO timestamp", () => {
+    expect(dayKey("2026-08-04T12:00:00Z")).toBe("2026-08-04")
+    expect(dayKey("2026-01-01T00:00:00.000Z")).toBe("2026-01-01")
+  })
+
+  it("returns empty for invalid timestamp", () => {
+    expect(dayKey("")).toBe("")
+    expect(dayKey("not-a-date")).toBe("")
+  })
+})
+
+describe("formatDateSeparator", () => {
+  it('returns "Today" for today', () => {
+    const today = new Date()
+    const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`
+    expect(formatDateSeparator(iso)).toBe("Today")
+  })
+
+  it('returns "Yesterday" for yesterday', () => {
+    const yesterday = new Date(Date.now() - 86400000)
+    const iso = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`
+    expect(formatDateSeparator(iso)).toBe("Yesterday")
+  })
+
+  it("returns a weekday name for dates this week", () => {
+    const threeDaysAgo = new Date(Date.now() - 3 * 86400000)
+    const iso = `${threeDaysAgo.getFullYear()}-${String(threeDaysAgo.getMonth() + 1).padStart(2, "0")}-${String(threeDaysAgo.getDate()).padStart(2, "0")}`
+    const result = formatDateSeparator(iso)
+    expect([ "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" ]).toContain(result)
+  })
+
+  it("returns locale date for older dates", () => {
+    expect(formatDateSeparator("2024-01-15")).toMatch(/\d/)
+  })
+
+  it("returns original string for invalid input", () => {
+    expect(formatDateSeparator("")).toBe("")
+    expect(formatDateSeparator("abc")).toBe("abc")
+  })
+})
+
+describe("formatChatTimestamp", () => {
+  it("returns time for today's timestamp", () => {
+    const now = Math.floor(Date.now() / 1000)
+    const result = formatChatTimestamp(now)
+    // Locale-dependent time format — contains digits and colon
+    expect(result).toMatch(/\d/)
+    expect(result).not.toBe("Yesterday")
+    expect(result).toContain(":")
+  })
+
+  it('returns "Yesterday" for yesterday\'s timestamp', () => {
+    const yesterday = Math.floor((Date.now() - 86400000) / 1000)
+    expect(formatChatTimestamp(yesterday)).toBe("Yesterday")
+  })
+
+  it("returns date string for older timestamps", () => {
+    const old = Math.floor(new Date("2024-01-15").getTime() / 1000)
+    const result = formatChatTimestamp(old)
+    expect(result).toMatch(/\d/)
+    expect(result).not.toMatch(/^\d{1,2}:\d{2}$/)
+    expect(result).not.toBe("Yesterday")
+  })
+
+  it("returns empty string for zero / invalid timestamps", () => {
+    expect(formatChatTimestamp(0)).toBe("")
+    expect(formatChatTimestamp(NaN)).toBe("")
   })
 })

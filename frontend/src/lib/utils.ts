@@ -184,3 +184,73 @@ export function getProfileColor(jid: string): string {
 export const AVATAR_ICON_COLOR = "#111b21"
 /** Light icon on the small dark group disc in stacked community logos. */
 export const AVATAR_ICON_ON_DARK = "#ffffff"
+
+const ISODAY = /^(\d{4})-(\d{2})-(\d{2})$/
+
+/**
+ * Format a unix-epoch-seconds timestamp for the chat list (WhatsApp-style):
+ * - Today → "HH:MM"
+ * - Yesterday → "Yesterday"
+ * - Older → locale date (e.g. "dd/mm/yyyy").
+ * - Invalid / zero → "".
+ */
+export function formatChatTimestamp(ts: number): string {
+  if (!ts) return ""
+  try {
+    const d = new Date(ts * 1000)
+    if (isNaN(d.getTime())) return ""
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const yesterday = new Date(today.getTime() - 86400000)
+    const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    if (msgDay.getTime() === today.getTime()) {
+      return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    }
+    if (msgDay.getTime() === yesterday.getTime()) return "Yesterday"
+    return d.toLocaleDateString([], { day: "numeric", month: "numeric", year: "numeric" })
+  } catch {
+    return ""
+  }
+}
+
+/**
+ *Take an ISO date string ("YYYY-MM-DD") and return a human-readable label
+ * matching WhatsApp's date-separator style:
+ * - Today → "Today"
+ * - Yesterday → "Yesterday"
+ * - This week → locale weekday name
+ * - Otherwise → locale date (e.g. "31/07/2026")
+ */
+export function formatDateSeparator(iso: string): string {
+  try {
+    const m = ISODAY.exec(iso)
+    if (!m) return iso
+    const d = new Date(+m[1], +m[2] - 1, +m[3])
+    if (isNaN(d.getTime())) return iso
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const yesterday = new Date(today.getTime() - 86400000)
+    const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    const diff = (today.getTime() - msgDay.getTime()) / 86400000
+    if (diff === 0) return "Today"
+    if (diff === 1) return "Yesterday"
+    if (diff < 7) return d.toLocaleDateString([], { weekday: "long" })
+    return d.toLocaleDateString([], { day: "numeric", month: "numeric", year: "numeric" })
+  } catch {
+    return iso
+  }
+}
+
+/**
+ *Extract "YYYY-MM-DD" from a message timestamp string (ISO8601). Returns
+ * the ISO date part or "" if the timestamp is unparseable.
+ */
+export function dayKey(ts: string): string {
+  try {
+    const d = new Date(ts)
+    if (isNaN(d.getTime())) return ""
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+  } catch {
+    return ""
+  }
+}
